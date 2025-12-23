@@ -11,6 +11,7 @@ from __future__ import annotations
 import sys
 from typing import TYPE_CHECKING
 
+from packaging.specifiers import SpecifierSet
 from packaging.tags import Tag, sys_tags
 from packaging.version import Version
 from pypi_simple import PyPISimple
@@ -107,7 +108,7 @@ def download_compatible_wheel(
         package: Package name
         output_dir: Directory to save the file
         index_url: Base URL of the simple repository index
-        version: Optional version constraint (exact match)
+        version: Optional version constraint (e.g., "1.0.0", "<2", ">=1.0,<2")
         show_progress: Whether to show download progress
 
     Returns:
@@ -129,10 +130,13 @@ def download_compatible_wheel(
         wheels = [p for p in packages if p.package_type == "wheel"]
 
         if version:
-            target_version = Version(version)
-            wheels = [w for w in wheels if w.version and Version(w.version) == target_version]
+            # Use packaging.specifiers for PEP 440 version matching
+            specifier = SpecifierSet(version, prereleases=True)
+            wheels = [
+                w for w in wheels if w.version and Version(w.version) in specifier
+            ]
             if not wheels:
-                print(f"No wheels found for {package}=={version}", file=sys.stderr)
+                print(f"No wheels found for {package} matching {version}", file=sys.stderr)
                 return None
 
         compatible_tags = get_compatible_tags()

@@ -167,7 +167,7 @@ def inspect(wheel_path: Path, as_json: bool) -> None:
     "--version",
     "pkg_version",
     default=None,
-    help="Specific version to download",
+    help="PEP 440 version specifier (e.g., '==1.0.0', '<2', '>=1.0,<2')",
 )
 @click.option(
     "--list",
