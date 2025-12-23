@@ -75,6 +75,9 @@ indent-style = "space"
 testpaths = ["tests"]
 pythonpath = ["src"]
 addopts = "-v --tb=short"
+markers = [
+  "integration: marks tests as integration tests (require network, slower)",
+]
 
 [tool.pyright]
 include = ["src"]
