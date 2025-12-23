@@ -41,12 +41,18 @@ uvx wheel-rename inspect ./wheels/icechunk-*.whl
 # 3. Rename icechunk -> icechunk_v1
 uvx wheel-rename ./wheels/icechunk-*.whl icechunk_v1 -o ./wheels/
 
-# 4. Create a venv and install both versions
+# 4. Download v2 wheel from nightly builds
+uvx wheel-rename download icechunk \
+    -i https://pypi.anaconda.org/scientific-python-nightly-wheels/simple \
+    --version ">=2.0.0.dev0" \
+    -o ./wheels/
+
+# 5. Create a venv and install both versions
 uv venv
 uv pip install ./wheels/icechunk_v1-*.whl  # v1 as icechunk_v1
-uv pip install icechunk                     # v2 from PyPI
+uv pip install ./wheels/icechunk-2*.whl    # v2 as icechunk
 
-# 5. Verify both work
+# 6. Verify both work
 uv run python -c "import icechunk_v1; print(f'v1: {icechunk_v1.__version__}')"
 uv run python -c "import icechunk; print(f'v2: {icechunk.__version__}')"
 ```
