@@ -146,5 +146,6 @@ def download_compatible_wheel(
             print(f"Found: {wheel.filename}")
 
         output_path = output_dir / wheel.filename
-        client.download_package(wheel, output_path)
+        # verify=False because some indexes (like Anaconda.org) don't provide digests
+        client.download_package(wheel, output_path, verify=False)
         return output_path
