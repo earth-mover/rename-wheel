@@ -18,7 +18,17 @@ console = Console()
 err_console = Console(stderr=True)
 
 
-@click.group()
+class DefaultToRename(click.Group):
+    """Custom group that defaults to 'rename' command when first arg is a .whl file."""
+
+    def parse_args(self, ctx: click.Context, args: list[str]) -> list[str]:
+        # If first arg looks like a wheel file, insert 'rename' command
+        if args and args[0].endswith(".whl") and not args[0].startswith("-"):
+            args = ["rename", *args]
+        return super().parse_args(ctx, args)
+
+
+@click.group(cls=DefaultToRename)
 @click.version_option()
 def main() -> None:
     """Rename Python wheel packages for multi-version installation."""
