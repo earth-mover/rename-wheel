@@ -60,6 +60,42 @@ uv run python -c "import icechunk; print(f'v2: {icechunk.__version__}')"
 uvx spare-tire inspect ./wheels/icechunk-*.whl
 ```
 
+## Example: Conflicting Dependencies (zarr v2 + v3)
+
+When packages have conflicting dependencies, use `--rename-dep` to rename the entire dependency tree:
+
+```bash
+# Scenario: Your package needs both zarr v2 API and zarr v3 API
+
+# 1. Download zarr v2 and rename to zarr_v2
+uvx spare-tire download zarr --version ">=2,<3" --rename zarr_v2 -o ./wheels/
+
+# 2. Rename your package that uses zarr v2, updating its dependency
+uvx spare-tire rename myreader-1.0.0.whl myreader_v1 \
+    --rename-dep zarr=zarr_v2 \
+    -o ./wheels/
+
+# 3. Install both versions
+pip install zarr  # v3
+pip install ./wheels/zarr_v2-*.whl
+pip install ./wheels/myreader_v1-*.whl
+```
+
+Now in Python:
+
+```python
+import zarr           # v3.x
+import zarr_v2        # v2.x (renamed)
+import myreader       # uses zarr v3
+import myreader_v1    # uses zarr_v2
+
+# Both can read the same Zarr format 2 data!
+data_v3 = myreader.read_data("store.zarr")
+data_v2 = myreader_v1.read_data("store.zarr")
+```
+
+See `tests/fixtures/zarr-compat/` for a complete working example.
+
 ## Commands
 
 ### 🛞 rename
@@ -78,6 +114,22 @@ spare-tire rename ./downloads/pkg.whl my_pkg_old -o ./renamed/
 
 - `-o, --output`: Output directory (default: same as input)
 - `--no-update-imports`: Don't update import statements in Python files
+- `--rename-dep`: Rename a dependency (can be used multiple times). See below.
+
+#### Renaming dependencies
+
+When a package has dependencies that also need renaming, use `--rename-dep`:
+
+```bash
+# If mypkg v1 depends on mydep<2, rename both:
+spare-tire rename mydep-1.0.0.whl mydep_v1 -o ./wheels/
+spare-tire rename mypkg-1.0.0.whl mypkg_v1 --rename-dep mydep=mydep_v1 -o ./wheels/
+```
+
+This updates:
+
+- `Requires-Dist: mydep<2` → `Requires-Dist: mydep_v1<2` in METADATA
+- `from mydep import ...` → `from mydep_v1 import ...` in Python files
 
 ### 🛞 download
 

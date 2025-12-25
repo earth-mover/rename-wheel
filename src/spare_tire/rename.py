@@ -73,8 +73,20 @@ def _iter_wheel_files(wheel_path: Path) -> Iterator[tuple[str, bytes]]:
             yield name, zf.read(name)
 
 
-def _update_metadata(content: bytes, _old_name: str, new_name: str) -> bytes:
-    """Update the METADATA file with the new package name."""
+def _update_metadata(
+    content: bytes,
+    _old_name: str,
+    new_name: str,
+    rename_deps: dict[str, str] | None = None,
+) -> bytes:
+    """Update the METADATA file with the new package name and renamed dependencies.
+
+    Args:
+        content: Original METADATA content
+        _old_name: Original package name (unused, kept for API compatibility)
+        new_name: New package name
+        rename_deps: Optional mapping of old dependency names to new names
+    """
     text = content.decode("utf-8")
     lines = text.split("\n")
     new_lines = []
@@ -83,6 +95,15 @@ def _update_metadata(content: bytes, _old_name: str, new_name: str) -> bytes:
         if line.startswith("Name:"):
             # Replace the package name
             new_lines.append(f"Name: {new_name}")
+        elif line.startswith("Requires-Dist:") and rename_deps:
+            # Update dependency names
+            new_line = line
+            for old_dep, new_dep in rename_deps.items():
+                # Match the dependency name with optional extras and version specifier
+                # e.g., "mydep<2" -> "mydep_v1<2" or "mydep[extra]>=1" -> "mydep_v1[extra]>=1"
+                pattern = rf"\b{re.escape(old_dep)}(\[|\s|<|>|=|!|;|$)"
+                new_line = re.sub(pattern, rf"{new_dep}\1", new_line)
+            new_lines.append(new_line)
         else:
             new_lines.append(line)
 
@@ -96,14 +117,20 @@ def _update_python_imports(content: bytes, old_name: str, new_name: str) -> byte
     - from old_name import ...
     - import old_name
     - from old_name.submodule import ...
+    - old_name.attribute (module attribute access)
     """
     text = content.decode("utf-8")
 
-    # Pattern to match imports (be careful not to replace partial matches)
+    # Pattern to match imports and module references
     # Only replace if old_name is a complete module name (word boundary)
     patterns = [
+        # from pkg import ... or from pkg.sub import ...
         (rf"\bfrom {re.escape(old_name)}(\s|\.)", rf"from {new_name}\1"),
+        # import pkg or import pkg as alias
         (rf"\bimport {re.escape(old_name)}\b", f"import {new_name}"),
+        # pkg.attribute (module attribute access, but not in strings)
+        # This handles cases like: zarr.open(), zarr.__version__
+        (rf"\b{re.escape(old_name)}\.", f"{new_name}."),
     ]
 
     for pattern, replacement in patterns:
@@ -118,6 +145,7 @@ def rename_wheel(
     output_dir: Path | None = None,
     *,
     update_imports: bool = True,
+    rename_deps: dict[str, str] | None = None,
 ) -> Path:
     """Rename a wheel package.
 
@@ -126,6 +154,9 @@ def rename_wheel(
         new_name: New package name (e.g., "icechunk_v1")
         output_dir: Output directory for the renamed wheel (default: same as input)
         update_imports: Whether to update import statements in Python files
+        rename_deps: Optional mapping of old dependency names to new names.
+                    This updates both Requires-Dist in METADATA and import statements.
+                    Example: {"mydep": "mydep_v1"} changes "mydep<2" to "mydep_v1<2"
 
     Returns:
         Path to the renamed wheel file
@@ -186,11 +217,19 @@ def rename_wheel(
 
         # Update METADATA file
         if new_file_name == f"{new_dist_info}/METADATA":
-            new_content = _update_metadata(content, old_name, new_name)
+            new_content = _update_metadata(content, old_name, new_name, rename_deps)
 
         # Update Python files (imports)
         elif update_imports and new_file_name.endswith(".py"):
             new_content = _update_python_imports(content, old_name_normalized, new_name_normalized)
+            # Also update imports for renamed dependencies
+            if rename_deps:
+                for old_dep, new_dep in rename_deps.items():
+                    old_dep_normalized = _normalize_name(old_dep)
+                    new_dep_normalized = _normalize_name(new_dep)
+                    new_content = _update_python_imports(
+                        new_content, old_dep_normalized, new_dep_normalized
+                    )
 
         # Skip the old RECORD file (we'll generate a new one)
         if name.endswith("/RECORD"):
@@ -225,6 +264,7 @@ def rename_wheel_from_bytes(
     new_name: str,
     *,
     update_imports: bool = True,
+    rename_deps: dict[str, str] | None = None,
 ) -> bytes:
     """Rename a wheel from bytes (for in-memory processing).
 
@@ -232,6 +272,8 @@ def rename_wheel_from_bytes(
         wheel_bytes: Original wheel file contents as bytes
         new_name: New package name (e.g., "icechunk_v1")
         update_imports: Whether to update import statements in Python files
+        rename_deps: Optional mapping of old dependency names to new names.
+                    This updates both Requires-Dist in METADATA and import statements.
 
     Returns:
         Renamed wheel file contents as bytes
@@ -297,13 +339,21 @@ def rename_wheel_from_bytes(
 
             # Update METADATA file
             if new_file_name == f"{new_dist_info}/METADATA":
-                new_content = _update_metadata(content, old_name_normalized, new_name)
+                new_content = _update_metadata(content, old_name_normalized, new_name, rename_deps)
 
             # Update Python files (imports)
             elif update_imports and new_file_name.endswith(".py"):
                 new_content = _update_python_imports(
                     content, old_name_normalized, new_name_normalized
                 )
+                # Also update imports for renamed dependencies
+                if rename_deps:
+                    for old_dep, new_dep in rename_deps.items():
+                        old_dep_normalized = _normalize_name(old_dep)
+                        new_dep_normalized = _normalize_name(new_dep)
+                        new_content = _update_python_imports(
+                            new_content, old_dep_normalized, new_dep_normalized
+                        )
 
             # Skip the old RECORD file (we'll generate a new one)
             if name.endswith("/RECORD"):

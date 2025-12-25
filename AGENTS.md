@@ -53,31 +53,38 @@ tests/
 ├── test_dual_install.py     # Multi-package isolation tests
 ├── test_icechunk_integration.py  # Real icechunk wheel tests
 └── fixtures/
-    └── dual-install/        # Example project for multi-version install
-        ├── pyproject.toml   # uv config with both icechunk versions
-        └── README.md        # Usage documentation
+    ├── dual-install/        # Example project for multi-version install
+    │   ├── pyproject.toml   # uv config with both icechunk versions
+    │   └── README.md        # Usage documentation
+    └── conflicting-deps/    # Test case for dependency conflicts
+        ├── create_wheels.py # Creates test wheels with conflicting deps
+        ├── test_conflict.py # Demonstrates --rename-dep solution
+        └── wheels/          # Generated test wheels
 ```
 
 ## Important Functions
 
 ### `rename.py`
 
-- `rename_wheel(wheel_path, new_name, output_dir, update_imports)` - Main entry point
+- `rename_wheel(wheel_path, new_name, output_dir, update_imports, rename_deps)` - Main entry point
+  - `rename_deps`: Optional dict mapping old dep names to new names (e.g., `{"mydep": "mydep_v1"}`)
 - `_update_python_imports(content, old_name, new_name)` - Regex-based import rewriting
+- `_update_metadata(content, old_name, new_name, rename_deps)` - Update METADATA including Requires-Dist
 - `inspect_wheel(wheel_path)` - Analyze wheel structure, detect extensions
 - `_compute_record_hash(data)` - SHA256 for RECORD file
 
 ### `download.py`
 
-- `download_compatible_wheel(package, output_dir, index_url, version)` - Download best match
+- `download_compatible_wheel(package, output_dir, index_url, version, python_version)` - Download best match
+  - `python_version`: Optional target Python version (e.g., "3.12") for cross-version downloads
 - `best_wheel(packages, compatible_tags)` - Select most compatible wheel
 - `parse_wheel_tags(filename)` - Extract platform tags from wheel name
+- `get_compatible_tags(python_version)` - Get platform tags, optionally for a specific Python version
 
 ### `cli.py`
 
-- Default command is `rename` when first arg ends with `.whl`
-- Uses `DefaultToRename` custom Click group class
-- Rich console output for nice formatting
+- Explicit subcommands: `rename`, `download`, `inspect`, `serve`
+- Rich console output with 🛞 and 🔧 emojis for theming
 
 ## Testing Patterns
 

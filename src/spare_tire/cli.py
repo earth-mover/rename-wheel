@@ -40,17 +40,43 @@ def main() -> None:
     default=False,
     help="Do not update import statements in Python files",
 )
+@click.option(
+    "--rename-dep",
+    "rename_deps_list",
+    multiple=True,
+    help="Rename a dependency: 'old_name=new_name' (can be specified multiple times)",
+)
 def rename(
     wheel_path: Path,
     new_name: str,
     output: Path | None,
     no_update_imports: bool,
+    rename_deps_list: tuple[str, ...],
 ) -> None:
     """🛞 Rename a wheel package.
 
     WHEEL_PATH: Path to the wheel file to rename
     NEW_NAME: New package name (e.g., "icechunk_v1")
+
+    Use --rename-dep to also rename dependencies. For example, if a package
+    depends on 'mydep<2', you can rename it to 'mydep_v1<2':
+
+        spare-tire rename pkg-1.0.0.whl pkg_v1 --rename-dep mydep=mydep_v1
     """
+    # Parse rename_deps into a dict
+    rename_deps: dict[str, str] | None = None
+    if rename_deps_list:
+        rename_deps = {}
+        for item in rename_deps_list:
+            if "=" not in item:
+                err_console.print(
+                    f"[red]🔧 Error:[/red] Invalid --rename-dep format: '{item}'. "
+                    "Expected 'old_name=new_name'"
+                )
+                sys.exit(1)
+            old, new = item.split("=", 1)
+            rename_deps[old.strip()] = new.strip()
+
     try:
         with console.status(f"[bold blue]Renaming {wheel_path.name}..."):
             result = rename_wheel(
@@ -58,6 +84,7 @@ def rename(
                 new_name,
                 output_dir=output,
                 update_imports=not no_update_imports,
+                rename_deps=rename_deps,
             )
 
         console.print(f"[green]🛞 Created:[/green] [bold]{result}[/bold]")
